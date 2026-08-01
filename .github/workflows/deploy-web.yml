@@ -1,0 +1,64 @@
+name: Deploy VirtLab Web
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Descomprimir virtlab_flutter.zip si lo subiste tal cual
+        run: |
+          if [ -f "virtlab_flutter.zip" ]; then
+            unzip -o virtlab_flutter.zip -d _extracted
+            cp -r _extracted/virtlab_flutter/. .
+            rm -rf _extracted virtlab_flutter.zip
+          elif [ -d "virtlab_flutter" ]; then
+            cp -r virtlab_flutter/. .
+            rm -rf virtlab_flutter
+          fi
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Instalar dependencias
+        run: flutter pub get
+
+      - name: Compilar versión web
+        run: |
+          flutter build web --release \
+            --base-href "/VirtLab./" \
+            --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
+            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }}
+
+      - name: Preparar para GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
