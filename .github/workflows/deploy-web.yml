@@ -1,4 +1,4 @@
-name: Deploy VirtLab Web
+name: Deploy VirtLab Web (GitHub Pages)
 
 on:
   workflow_dispatch:
@@ -37,17 +37,45 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Habilitar Flutter Web
+        run: flutter config --enable-web
+
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Compilar versión web
+      - name: Calcular base-href a partir del nombre del repo
+        id: basehref
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          echo "value=/$REPO_NAME/" >> "$GITHUB_OUTPUT"
+
+      - name: Insertar configuración pública de Firebase Web en el service worker de FCM
+        run: |
+          sed -i "s#__FIREBASE_WEB_API_KEY__#${{ secrets.FIREBASE_WEB_API_KEY }}#g" web/firebase-messaging-sw.js
+          sed -i "s#__FIREBASE_WEB_AUTH_DOMAIN__#${{ secrets.FIREBASE_WEB_AUTH_DOMAIN }}#g" web/firebase-messaging-sw.js
+          sed -i "s#__FIREBASE_WEB_PROJECT_ID__#${{ secrets.FIREBASE_WEB_PROJECT_ID }}#g" web/firebase-messaging-sw.js
+          sed -i "s#__FIREBASE_WEB_STORAGE_BUCKET__#${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }}#g" web/firebase-messaging-sw.js
+          sed -i "s#__FIREBASE_WEB_MESSAGING_SENDER_ID__#${{ secrets.FIREBASE_WEB_MESSAGING_SENDER_ID }}#g" web/firebase-messaging-sw.js
+          sed -i "s#__FIREBASE_WEB_APP_ID__#${{ secrets.FIREBASE_WEB_APP_ID }}#g" web/firebase-messaging-sw.js
+
+      - name: Compilar Flutter Web release
         run: |
           flutter build web --release \
-            --base-href "/VirtLab./" \
+            --base-href "${{ steps.basehref.outputs.value }}" \
             --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
-            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }}
+            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }} \
+            --dart-define=FIREBASE_WEB_API_KEY=${{ secrets.FIREBASE_WEB_API_KEY }} \
+            --dart-define=FIREBASE_WEB_AUTH_DOMAIN=${{ secrets.FIREBASE_WEB_AUTH_DOMAIN }} \
+            --dart-define=FIREBASE_WEB_PROJECT_ID=${{ secrets.FIREBASE_WEB_PROJECT_ID }} \
+            --dart-define=FIREBASE_WEB_STORAGE_BUCKET=${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }} \
+            --dart-define=FIREBASE_WEB_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_WEB_MESSAGING_SENDER_ID }} \
+            --dart-define=FIREBASE_WEB_APP_ID=${{ secrets.FIREBASE_WEB_APP_ID }} \
+            --dart-define=FIREBASE_VAPID_KEY=${{ secrets.FIREBASE_VAPID_KEY }}
 
-      - name: Preparar para GitHub Pages
+      - name: Preparar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir artefacto de build/web
         uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
