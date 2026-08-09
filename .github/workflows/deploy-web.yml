@@ -1,9 +1,11 @@
-name: Deploy VirtLab Web
+name: Deploy VirtLab a GitHub Pages
 
+# Se ejecuta cada vez que subís/cambiás algo en la rama main
+# (por ejemplo, cuando subís o reemplazás el ZIP del sitio).
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,59 +14,49 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Descargar el código
-        uses: actions/checkout@v4
-
-      - name: Descomprimir virtlab_flutter.zip si lo subiste tal cual
-        run: |
-          if [ -f "virtlab_flutter.zip" ]; then
-            unzip -o virtlab_flutter.zip -d _extracted
-            cp -r _extracted/virtlab_flutter/. .
-            rm -rf _extracted virtlab_flutter.zip
-          elif [ -d "virtlab_flutter" ]; then
-            cp -r virtlab_flutter/. .
-            rm -rf virtlab_flutter
-          fi
-
-      - name: Instalar Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      - name: Generar la carpeta web/ del proyecto (si no existe)
-        run: |
-          if [ ! -d "web" ]; then
-            flutter create --platforms=web --org com.panny --project-name labi .
-          fi
-
-      - name: Instalar dependencias
-        run: flutter pub get
-
-      - name: Compilar versión web
-        run: |
-          flutter build web --release \
-            --base-href "/VirtLab./" \
-            --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
-            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }}
-
-      - name: Preparar para GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: build/web
-
   deploy:
-    needs: build
-    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
     steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Descomprimir el ZIP del sitio
+        run: |
+          set -e
+          mkdir -p site
+
+          # Busca el primer .zip en la raíz del repo (el que subiste tal cual,
+          # sin descomprimir). Si no hay ningún .zip, asume que ya subiste
+          # los archivos sueltos (index.html, css/, js/, assets/) y los usa
+          # directamente.
+          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
+
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Encontrado ZIP: $ZIP_FILE -> descomprimiendo en ./site"
+            unzip -o "$ZIP_FILE" -d site
+          else
+            echo "No se encontró ningún .zip, usando los archivos sueltos del repo"
+            shopt -s extglob
+            cp -r !(site|.git|.github) site/ 2>/dev/null || true
+          fi
+
+          echo "Contenido final que se va a publicar:"
+          find site -maxdepth 2
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Preparar artefacto para Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
       - name: Publicar en GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
