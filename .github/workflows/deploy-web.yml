@@ -31,19 +31,14 @@ jobs:
           set -e
           mkdir -p site
 
-          # Busca el primer .zip en la raíz del repo (el que subiste tal cual,
-          # sin descomprimir). Si no hay ningún .zip, asume que ya subiste
-          # los archivos sueltos (index.html, css/, js/, assets/) y los usa
-          # directamente.
           ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
 
           if [ -n "$ZIP_FILE" ]; then
             echo "Encontrado ZIP: $ZIP_FILE -> descomprimiendo en ./site"
             unzip -o "$ZIP_FILE" -d site
           else
-            echo "No se encontró ningún .zip, usando los archivos sueltos del repo"
-            shopt -s extglob
-            cp -r !(site|.git|.github) site/ 2>/dev/null || true
+            echo "No se encontró ningún .zip, copiando los archivos sueltos del repo"
+            rsync -a --exclude='site' --exclude='.git' --exclude='.github' ./ site/
           fi
 
           echo "Contenido final que se va a publicar:"
