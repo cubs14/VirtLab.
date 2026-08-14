@@ -33,14 +33,9 @@ jobs:
             --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
             --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }}
 
-      - name: Comprimir el resultado
-        run: |
-          cd build/web
-          zip -r ../../virtlab-web-listo.zip .
-
-      - name: Subir el zip como artefacto descargable
+      - name: Subir build/web como artefacto descargable
         uses: actions/upload-artifact@v4
         with:
           name: virtlab-web-listo
-          path: virtlab-web-listo.zip
+          path: build/web
           retention-days: 14
