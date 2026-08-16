@@ -1,57 +1,86 @@
-name: Build VirtLab Web (para Netlify)
+name: Build VirtLab Web for Netlify
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  build-web:
+    name: Build VirtLab Web
     runs-on: ubuntu-latest
+
     steps:
-      - name: Descargar el código
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Descomprimir virtlab_flutter.zip si lo subiste tal cual
-        run: |
-          if [ -f "virtlab_flutter.zip" ]; then
-            unzip -o virtlab_flutter.zip -d _extracted
-            cp -r _extracted/virtlab_flutter/. .
-            rm -rf _extracted virtlab_flutter.zip
-          elif [ -d "virtlab_flutter" ]; then
-            cp -r virtlab_flutter/. .
-            rm -rf virtlab_flutter
-          fi
-
-      - name: Instalar Flutter
+      - name: Configurar Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
+          cache: true
 
-      - name: Generar la carpeta web/ del proyecto (si no existe)
+      - name: Mostrar versiones
         run: |
-          if [ ! -d "web" ]; then
-            flutter create --platforms=web --org com.panny --project-name labi .
-          fi
+          flutter --version
+          dart --version
 
-      - name: Redirección para que Netlify sirva bien la app (SPA)
-        run: echo "/*    /index.html   200" > web/_redirects
+      - name: Habilitar Flutter Web
+        run: flutter config --enable-web
 
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Compilar versión web (raíz "/", para Netlify)
+      - name: Analizar proyecto
+        run: flutter analyze
+
+      - name: Preparar Firebase Web
         run: |
-          flutter build web --release \
-            --base-href "/" \
-            --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
-            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }}
+          if [ ! -f web/firebase-messaging-sw.js ]; then
+            echo "No existe firebase-messaging-sw.js"
+          else
+            echo "Firebase Messaging Web encontrado"
+          fi
 
-      - name: Comprimir el sitio compilado
-        run: cd build/web && zip -r ../../virtlab-web-netlify.zip .
+      - name: Compilar VirtLab Web
+        run: |
+          flutter build web \
+            --release \
+            --base-href "/"
 
-      - name: Subir como artefacto descargable
+      - name: Verificar compilación
+        run: |
+          test -f build/web/index.html
+          test -d build/web/assets
+
+          echo "===================================="
+          echo "VirtLab Web compilado correctamente"
+          echo "===================================="
+
+          du -sh build/web
+          find build/web -maxdepth 2 -type f | head -100
+
+      - name: Crear ZIP para Netlify
+        run: |
+          cd build/web
+          zip -r ../../virtlab-web-netlify.zip .
+
+      - name: Verificar ZIP
+        run: |
+          test -f virtlab-web-netlify.zip
+
+          echo "===================================="
+          echo "ZIP generado:"
+          echo "virtlab-web-netlify.zip"
+          echo "===================================="
+
+          ls -lh virtlab-web-netlify.zip
+
+      - name: Subir ZIP como artifact
         uses: actions/upload-artifact@v4
         with:
           name: virtlab-web-netlify
           path: virtlab-web-netlify.zip
+          if-no-files-found: error
+          retention-days: 30
