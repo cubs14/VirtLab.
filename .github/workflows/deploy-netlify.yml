@@ -12,36 +12,15 @@ jobs:
       - name: Descargar el código
         uses: actions/checkout@v4
 
-      - name: Preparar proyecto Flutter (descomprime el ZIP solo)
+      - name: Descomprimir virtlab_flutter.zip si lo subiste tal cual
         run: |
-          set -e
-
-          if [ -f "pubspec.yaml" ]; then
-            echo "El proyecto Flutter ya está en la raíz del repositorio."
-          else
-            ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
-
-            if [ -n "$ZIP_FILE" ]; then
-              echo "Se encontró un ZIP: $ZIP_FILE"
-              unzip -o "$ZIP_FILE" -d _extracted
-              rm -f "$ZIP_FILE"
-            fi
-
-            SEARCH_DIR="."
-            if [ -d "_extracted" ]; then
-              SEARCH_DIR="_extracted"
-            fi
-
-            PROJECT_DIR=$(find "$SEARCH_DIR" -maxdepth 4 -not -path "*/.git/*" -iname "pubspec.yaml" -exec dirname {} \; | head -n 1)
-
-            if [ -z "$PROJECT_DIR" ]; then
-              echo "ERROR: No se encontró ningún pubspec.yaml (ni en un .zip ni en el repositorio)."
-              exit 1
-            fi
-
-            echo "Proyecto Flutter encontrado en: $PROJECT_DIR"
-            cp -r "$PROJECT_DIR"/. .
-            rm -rf _extracted
+          if [ -f "virtlab_flutter.zip" ]; then
+            unzip -o virtlab_flutter.zip -d _extracted
+            cp -r _extracted/virtlab_flutter/. .
+            rm -rf _extracted virtlab_flutter.zip
+          elif [ -d "virtlab_flutter" ]; then
+            cp -r virtlab_flutter/. .
+            rm -rf virtlab_flutter
           fi
 
       - name: Instalar Flutter
@@ -55,40 +34,20 @@ jobs:
             flutter create --platforms=web --org com.panny --project-name labi .
           fi
 
-      - name: Service worker de Firebase Messaging (recordatorios push en Web)
-        run: |
-          # Solo se genera si aún no existe uno propio en el repo.
-          # Sin esto, FCM no puede recibir notificaciones en el
-          # navegador con la pestaña cerrada. Requiere además una
-          # VAPID key (ver README, sección "Versión Web").
-          if [ ! -f "web/firebase-messaging-sw.js" ]; then
-            cat > web/firebase-messaging-sw.js << 'EOF'
-          importScripts('https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js');
-          importScripts('https://www.gstatic.com/firebasejs/10.13.1/firebase-messaging-compat.js');
-
-          firebase.initializeApp({
-            apiKey: 'AIzaSyCAJY4EUT4yEihpqNhsRXf4usGXw3YAdbk',
-            authDomain: 'labi-2622a.firebaseapp.com',
-            projectId: 'labi-2622a',
-            storageBucket: 'labi-2622a.firebasestorage.app',
-            messagingSenderId: '671169082209',
-            appId: '1:671169082209:web:5fd0010b61349137b8cb20',
-          });
-
-          const messaging = firebase.messaging();
-          EOF
-          fi
+      - name: Redirección para que Netlify sirva bien la app (SPA)
+        run: echo "/*    /index.html   200" > web/_redirects
 
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Compilar versión web
+      - name: Compilar versión web (raíz "/", para Netlify)
         run: |
           flutter build web --release \
             --base-href "/" \
             --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} \
-            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }} \
-            --dart-define=FCM_WEB_VAPID_KEY=${{ secrets.FCM_WEB_VAPID_KEY }}
+            --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
+            --dart-define=CEREBRAS_API_KEY=${{ secrets.CEREBRAS_API_KEY }} \
+            --dart-define=APPWRITE_API_KEY=${{ secrets.APPWRITE_API_KEY }}
 
       - name: Publicar en Netlify
         uses: nwtgck/actions-netlify@v3
